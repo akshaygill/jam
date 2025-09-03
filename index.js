@@ -3,7 +3,7 @@ const smartcar = require('smartcar');
 require('dotenv').config();
 
 const app = express();
-const port = 8000;
+const port = process.env.PORT || 8000;
 
 let accessToken = null;
 
@@ -16,37 +16,55 @@ const authClient = new smartcar.AuthClient({
   scope: ['read_vehicle_info', 'read_odometer'],
 });
 
-// Route to start OAuth flow
+// 🏠 Home route
+app.get('/', (req, res) => {
+  res.send(`
+    <h1>🚗 Welcome to Smartcar Tesla App</h1>
+    <p><a href="/login">Click here to connect your Tesla</a></p>
+  `);
+});
+
+// 🔐 OAuth login
 app.get('/login', (req, res) => {
-  const link = authClient.getAuthUrl();
-  res.redirect(link);
+  const authUrl = authClient.getAuthUrl();
+  res.redirect(authUrl);
 });
 
-// OAuth callback
+// 🔁 OAuth callback
 app.get('/callback', async (req, res) => {
-  const code = req.query.code;
-  const token = await authClient.exchangeCode(code);
-  accessToken = token.accessToken;
-  res.redirect('/vehicle');
+  try {
+    const code = req.query.code;
+    const token = await authClient.exchangeCode(code);
+    accessToken = token.accessToken;
+    res.redirect('/vehicle');
+  } catch (err) {
+    console.error('OAuth Error:', err);
+    res.status(500).send('OAuth failed');
+  }
 });
 
-// Get vehicle info
+// 🚘 Get vehicle info
 app.get('/vehicle', async (req, res) => {
   if (!accessToken) {
     return res.redirect('/login');
   }
 
   try {
-    const vehicles = await smartcar.getVehicleIds(accessToken);
-    const vehicle = new smartcar.Vehicle(vehicles.vehicles[0], accessToken);
+    const { vehicles } = await smartcar.getVehicleIds(accessToken);
+    if (!vehicles.length) {
+      return res.send('No vehicles found for this account.');
+    }
+
+    const vehicle = new smartcar.Vehicle(vehicles[0], accessToken);
     const info = await vehicle.info();
     res.json(info);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error getting vehicle info');
+    console.error('Vehicle Info Error:', err);
+    res.status(500).send('Failed to fetch vehicle info');
   }
 });
 
+// Start server
 app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+  console.log(`✅ Smartcar app listening on port ${port}`);
 });

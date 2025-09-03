@@ -1,70 +1,54 @@
 const express = require('express');
-const smartcar = require('smartcar');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 8000;
 
-let accessToken = null;
+app.use(express.json());
 
-// Smartcar Auth Client
-const authClient = new smartcar.AuthClient({
-  clientId: process.env.SMARTCAR_CLIENT_ID,
-  clientSecret: process.env.SMARTCAR_CLIENT_SECRET,
-  redirectUri: process.env.SMARTCAR_REDIRECT_URI,
-  mode: process.env.SMARTCAR_MODE, // 'test' or 'live'
-  scope: ['read_vehicle_info', 'read_odometer'],
-});
-
-// 🏠 Home route
 app.get('/', (req, res) => {
   res.send(`
-    <h1>🚗 Welcome to Smartcar Tesla App</h1>
-    <p><a href="/login">Click here to connect your Tesla</a></p>
+    <h1>Smartcar Tesla Webhook Listener</h1>
+    <p>Waiting for webhook data...</p>
   `);
 });
 
-// 🔐 OAuth login
-app.get('/login', (req, res) => {
-  const authUrl = authClient.getAuthUrl();
-  res.redirect(authUrl);
-});
+app.post('/webhook', (req, res) => {
+  const managementToken = process.env.SMARTCAR_MANAGEMENT_TOKEN;
+  const challenge = req.body.challenge;
 
-// 🔁 OAuth callback
-app.get('/callback', async (req, res) => {
-  try {
-    const code = req.query.code;
-    const token = await authClient.exchangeCode(code);
-    accessToken = token.accessToken;
-    res.redirect('/vehicle');
-  } catch (err) {
-    console.error('OAuth Error:', err);
-    res.status(500).send('OAuth failed');
-  }
-});
-
-// 🚘 Get vehicle info
-app.get('/vehicle', async (req, res) => {
-  if (!accessToken) {
-    return res.redirect('/login');
+  if (challenge) {
+    // Respond to Smartcar webhook verification challenge
+    const signature = crypto
+      .createHmac('sha256', managementToken)
+      .update(challenge)
+      .digest('hex');
+    
+    console.log('Webhook verification challenge received. Responding with signature:', signature);
+    return res.send(signature);
   }
 
-  try {
-    const { vehicles } = await smartcar.getVehicleIds(accessToken);
-    if (!vehicles.length) {
-      return res.send('No vehicles found for this account.');
-    }
+  // Normal webhook event
+  const payload = req.body;
+  const data = payload.data || {};
 
-    const vehicle = new smartcar.Vehicle(vehicles[0], accessToken);
-    const info = await vehicle.info();
-    res.json(info);
-  } catch (err) {
-    console.error('Vehicle Info Error:', err);
-    res.status(500).send('Failed to fetch vehicle info');
-  }
+  console.log('=== Webhook vehicle data received ===');
+  console.log('Vehicle locked:', data.Closure?.IsLocked);
+  console.log('Firmware version:', data.ConnectivitySoftware?.CurrentFirmwareVersion);
+  console.log('Vehicle asleep:', data.ConnectivityStatus?.IsAsleep);
+  console.log('Digital key paired:', data.ConnectivityStatus?.IsDigitalKeyPaired);
+  console.log('Vehicle online:', data.ConnectivityStatus?.IsOnline);
+  console.log('Odometer (km):', data.Odometer?.TraveledDistance);
+  console.log('Battery SOC (%):', data.TractionBattery?.StateOfCharge);
+  console.log('Vehicle nickname:', data.VehicleIdentification?.Nickname);
+  console.log('User permissions:', data.VehicleUserAccount?.Permissions);
+  console.log('User role:', data.VehicleUserAccount?.Role);
+  console.log('=====================================');
+
+  res.status(200).send('Webhook data received');
 });
 
-// Start server
 app.listen(port, () => {
-  console.log(`✅ Smartcar app listening on port ${port}`);
+  console.log(`Webhook listener running on port ${port}`);
 });

@@ -1,52 +1,51 @@
-const express = require('express');
-const crypto = require('crypto');
-require('dotenv').config();
+'use strict';
 
-const app = express();
+const cors = require('cors');
+const express = require('express');
+const smartcar = require('smartcar');
+const bodyParser = require('body-parser');
+
+const app = express()
+  .use(cors())
+  .use(bodyParser.json());
+
 const port = process.env.PORT || 8000;
 
-app.use(express.json());
+app.post('/webhook', function(req, res) {
+  const eventType = req.body.eventType;
 
-app.get('/', (req, res) => {
-  res.send(`
-    <h1>Smartcar Tesla Webhook Listener</h1>
-    <p>Waiting for webhook data...</p>
-  `);
-});
+  if (eventType === 'VERIFY') {
+    const application_management_token = process.env.APPLICATION_MANAGEMENT_TOKEN;
+    try {
+      const challenge = req.body.data.challenge;
 
-app.post('/webhook', (req, res) => {
-  const managementToken = process.env.SMARTCAR_MANAGEMENT_TOKEN;
-  const challenge = req.body.challenge;
+      const hmac = smartcar.hashChallenge(
+        application_management_token,
+        challenge
+      );
 
-  if (challenge) {
-    // Respond to Smartcar webhook verification challenge
-    const signature = crypto
-      .createHmac('sha256', managementToken)
-      .update(challenge)
-      .digest('hex');
-    
-    console.log('Webhook verification challenge received. Responding with signature:', signature);
-    return res.send(signature);
+      // Send raw HMAC string as plain text (required by Smartcar)
+      res.set('Content-Type', 'text/plain');
+      return res.send(hmac);
+    } catch (error) {
+      console.error('Webhook verification error:', error);
+      return res.status(500).json({
+        error: 'Internal server error during webhook verification'
+      });
+    }
+  } else if (eventType === 'VEHICLE_STATE') {
+    // Handle vehicle state payload
+    console.log('Vehicle state payload received:', JSON.stringify(req.body, null, 2));
+    return res.status(200).send('Payload received');
+  } else if (eventType === 'VEHICLE_ERROR') {
+    // Handle vehicle error payload
+    console.log('Vehicle error payload received:', JSON.stringify(req.body, null, 2));
+    return res.status(200).send('Payload received');
+  } else {
+    // Unknown eventType
+    console.log('Unknown eventType received:', eventType);
+    return res.status(400).send('Unknown eventType');
   }
-
-  // Normal webhook event
-  const payload = req.body;
-  const data = payload.data || {};
-
-  console.log('=== Webhook vehicle data received ===');
-  console.log('Vehicle locked:', data.Closure?.IsLocked);
-  console.log('Firmware version:', data.ConnectivitySoftware?.CurrentFirmwareVersion);
-  console.log('Vehicle asleep:', data.ConnectivityStatus?.IsAsleep);
-  console.log('Digital key paired:', data.ConnectivityStatus?.IsDigitalKeyPaired);
-  console.log('Vehicle online:', data.ConnectivityStatus?.IsOnline);
-  console.log('Odometer (km):', data.Odometer?.TraveledDistance);
-  console.log('Battery SOC (%):', data.TractionBattery?.StateOfCharge);
-  console.log('Vehicle nickname:', data.VehicleIdentification?.Nickname);
-  console.log('User permissions:', data.VehicleUserAccount?.Permissions);
-  console.log('User role:', data.VehicleUserAccount?.Role);
-  console.log('=====================================');
-
-  res.status(200).send('Webhook data received');
 });
 
 app.listen(port, () => {

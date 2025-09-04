@@ -1,53 +1,44 @@
 'use strict';
 
-const cors = require('cors');
 const express = require('express');
-const smartcar = require('smartcar');
+const cors = require('cors');
 const bodyParser = require('body-parser');
+const crypto = require('crypto');
 
-const app = express()
-  .use(cors())
-  .use(bodyParser.json());
-
+const app = express();
 const port = process.env.PORT || 8000;
+const APPLICATION_MANAGEMENT_TOKEN = process.env.APPLICATION_MANAGEMENT_TOKEN;
 
-app.post('/webhook', function(req, res) {
+app.use(cors());
+app.use(bodyParser.json());
+
+function hashChallenge(token, challenge) {
+  return crypto.createHmac('sha256', token).update(challenge).digest('hex');
+}
+
+app.post('/webhook', (req, res) => {
   const eventType = req.body.eventType;
 
   if (eventType === 'VERIFY') {
-    const application_management_token = process.env.APPLICATION_MANAGEMENT_TOKEN;
     try {
       const challenge = req.body.data.challenge;
-
-      const hmac = smartcar.hashChallenge(
-        application_management_token,
-        challenge
-      );
-
-      // Send raw HMAC string as plain text (required by Smartcar)
-      res.set('Content-Type', 'text/plain');
-      return res.send(hmac);
+      const hmac = hashChallenge(APPLICATION_MANAGEMENT_TOKEN, challenge);
+      console.log("Webhook verification successful.");
+      res.json({ challenge: hmac });
     } catch (error) {
-      console.error('Webhook verification error:', error);
-      return res.status(500).json({
-        error: 'Internal server error during webhook verification'
-      });
+      console.error('Verification error:', error);
+      res.status(500).json({ error: 'Internal server error during webhook verification' });
     }
-  } else if (eventType === 'VEHICLE_STATE') {
-    // Handle vehicle state payload
-    console.log('Vehicle state payload received:', JSON.stringify(req.body, null, 2));
-    return res.status(200).send('Payload received');
-  } else if (eventType === 'VEHICLE_ERROR') {
-    // Handle vehicle error payload
-    console.log('Vehicle error payload received:', JSON.stringify(req.body, null, 2));
-    return res.status(200).send('Payload received');
+
+  } else if (eventType === 'VEHICLE_STATE' || eventType === 'VEHICLE_ERROR') {
+    console.log(`=== Webhook ${eventType.toLowerCase()} data received ===`);
+    console.log(JSON.stringify(req.body, null, 2));
+    res.status(200).send('Payload received');
   } else {
-    // Unknown eventType
-    console.log('Unknown eventType received:', eventType);
-    return res.status(400).send('Unknown eventType');
+    res.status(400).send('Invalid eventType');
   }
 });
 
 app.listen(port, () => {
-  console.log(`Webhook listener running on port ${port}`);
+  console.log(`Listening on port ${port}`);
 });

@@ -63,4 +63,27 @@ app.get('/', (req, res) => {
     <h2>Vehicle Info</h2>
     <ul>
       <li>ID: ${vehicle.id || 'N/A'}</li>
-      <li>Make: ${vehicle.make |
+      <li>Make: ${vehicle.make || 'N/A'}</li>
+      <li>Model: ${vehicle.model || 'N/A'}</li>
+      <li>Year: ${vehicle.year || 'N/A'}</li>
+    </ul>
+    <h2>User Info</h2>
+    <ul>
+      <li>ID: ${user.id || 'N/A'}</li>
+    </ul>
+  `;
+
+  if (errors.length > 0) {
+    html += '<h2>Errors</h2><ul>';
+    for (const error of errors) {
+      html += `<li><strong>${error.code}:</strong> ${error.description} <a href="${error.docURL}" target="_blank">Docs</a></li>`;
+    }
+    html += '</ul>';
+  }
+
+  res.send(html);
+});
+
+app.listen(port, () => {
+  console.log(`Listening on port ${port}`);
+});

@@ -5,11 +5,11 @@
   "scripts": {
     "start": "node index.js"
   },
-  "dependencies": {
-    "body-parser": "^1.20.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "smartcar": "^4.6.0"
-  }
+    "dependencies": {
+  "body-parser": "^1.20.2",
+  "cors": "^2.8.5",
+  "dotenv": "^16.3.1",
+  "express": "^4.18.2",
+  "@smartcar/sdk": "^5.2.0"
+}
 }
